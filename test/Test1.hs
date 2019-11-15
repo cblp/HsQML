@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 {-# LANGUAGE DeriveDataTypeable, TypeFamilies #-}
 
 module Main where

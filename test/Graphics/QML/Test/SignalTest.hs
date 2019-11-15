@@ -10,8 +10,6 @@ import Graphics.QML.Test.ScriptDSL (Expr, Prog)
 import qualified Graphics.QML.Test.ScriptDSL as S
 
 import Test.QuickCheck.Arbitrary
-import Control.Applicative
-import Data.Monoid
 import Data.Proxy
 import Data.Typeable
 
@@ -62,7 +60,7 @@ instance SignalKeyClass ObjectSignal where
 
 chainSignal :: Int -> [String] -> String -> String -> Prog
 chainSignal n args sig fn = S.makeCont args
-    ((S.connect (S.var n `S.dot` sig) S.contVar) `mappend` 
+    ((S.connect (S.var n `S.dot` sig) S.contVar) `mappend`
      (S.eval $ (S.var n) `S.dot` fn `S.call` [])) `mappend`
     (S.disconnect (S.var n `S.dot` sig) S.callee)
 
@@ -116,7 +114,7 @@ instance TestAction SignalTest1 where
                 fireSignal (Proxy :: Proxy NoArgsSignal) m
                 return $ Right ()
             _             -> return $ Left TBadActionCtor),
-        defSignal "noArgsSignal" (Proxy :: Proxy NoArgsSignal), 
+        defSignal "noArgsSignal" (Proxy :: Proxy NoArgsSignal),
         defMethod "fireInt" $ \m -> (expectActionRef m $ \a -> case a of
             ST1FireInt v -> do
                 fireSignal (Proxy :: Proxy IntSignal) m v

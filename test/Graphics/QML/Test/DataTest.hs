@@ -9,7 +9,6 @@ import Graphics.QML.Test.MayGen
 import qualified Graphics.QML.Test.ScriptDSL as S
 
 import Test.QuickCheck.Arbitrary
-import Control.Applicative
 import Data.Typeable
 
 data DataTest a
@@ -22,7 +21,7 @@ data DataTest a
 instance (Eq a, Show a, Typeable a, S.Literal a, Arbitrary a, MakeDefault a,
           Marshal a, CanPassTo a ~ Yes, CanReturnTo a ~ Yes, CanGetFrom a ~ Yes)
          => TestAction (DataTest a) where
-    legalActionIn _ _ = True 
+    legalActionIn _ _ = True
     nextActionsFor _ = mayOneof [
         DTCallMethod <$> fromGen arbitrary,
         DTMethodRet <$> fromGen arbitrary,

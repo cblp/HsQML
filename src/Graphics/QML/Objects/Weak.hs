@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 -- | Facilities for working with weak references, finalisers, and factory
 -- pools.
 module Graphics.QML.Objects.Weak (
@@ -31,7 +33,7 @@ import Data.Map (Map)
 -- can be used to monitor the life cycles of QML objects.
 newtype WeakObjRef tt = WeakObjRef HsQMLObjectHandle
 
--- | Converts a strong 'ObjRef' into a 'WeakObjRef'. 
+-- | Converts a strong 'ObjRef' into a 'WeakObjRef'.
 toWeakObjRef :: ObjRef tt -> IO (WeakObjRef tt)
 toWeakObjRef (ObjRef hndl) = do
     hndl' <- copyObjectHandle hndl True
@@ -88,9 +90,9 @@ addObjFinaliser (ObjFinaliser final) (ObjRef hndl) =
 -- again from the pool. Conversely, if an object instance is no longer being
 -- used then pool will not prevent it from being garbage collected.
 data FactoryPool tt = FactoryPool {
-    factory_   :: tt -> IO (ObjRef tt),
-    pool_      :: MVar (Map tt (WeakObjRef tt)),
-    finaliser_ :: ObjFinaliser tt
+    factory   :: tt -> IO (ObjRef tt),
+    pool      :: MVar (Map tt (WeakObjRef tt)),
+    finaliser :: ObjFinaliser tt
 }
 
 -- | Creates a new 'FactoryPool' using the supplied factory function.
@@ -101,13 +103,13 @@ newFactoryPool factory = do
     finaliser <- newObjFinaliser $ \obj -> do
         value <- fromObjRefIO obj
         modifyMVar_ pool (return . Map.delete value)
-    return $ FactoryPool factory pool finaliser
+    return FactoryPool{factory, pool, finaliser}
 
 -- | Return the pool's canonical QML object for a value of @tt@, either by
 -- creating it or looking it up in the pool's cache of objects.
 getPoolObject :: (Ord tt) =>
     FactoryPool tt -> tt -> IO (ObjRef tt)
-getPoolObject (FactoryPool factory pool finaliser) value =
+getPoolObject FactoryPool{factory, pool, finaliser} value =
     modifyMVar pool $ \pmap ->
         case Map.lookup value pmap of
             Just wkObj -> do

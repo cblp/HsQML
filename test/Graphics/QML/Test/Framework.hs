@@ -16,7 +16,6 @@ import Test.QuickCheck.Gen
 import Test.QuickCheck.Arbitrary
 import Data.List (mapAccumR)
 import Data.Maybe
-import Data.Monoid
 import Data.Proxy
 import Data.Typeable
 import Data.IORef
@@ -158,7 +157,7 @@ instance (TestAction a) => Arbitrary (TestBoxSrc a) where
         where env = newTestEnv $ TestType (Proxy :: Proxy a)
 
 mockFromSrc :: forall a. (TestAction a) => TestBoxSrc a -> IO (MockObj a)
-mockFromSrc (TestBoxSrc ts) = do 
+mockFromSrc (TestBoxSrc ts) = do
     statusRef <- newIORef $ TestStatus ts Nothing
         (newTestEnv $ TestType (Proxy :: Proxy a)) IntMap.empty
     return $ MockObj (Serial 0) statusRef
@@ -227,12 +226,12 @@ instance MakeDefault (Maybe a) where
 
 expectAction :: (TestAction a, MakeDefault b) =>
     MockObj a -> (a -> IO (Either TestFault b)) -> IO b
-expectAction mock pred = do
+expectAction mock pred' = do
     status <- readIORef $ mockStatus mock
     res <- case status of
         TestStatus (b:_) Nothing env _ -> case b of
             TestBox _ a -> case cast a of
-                Just a' -> pred a' >>= return . fmap ((,) (updateEnvRaw a' env))
+                Just a' -> pred' a' >>= return . fmap ((,) (updateEnvRaw a' env))
                 _       -> return $ Left TBadActionType
         TestStatus [] Nothing _ _       -> return $ Left TOverAction
         TestStatus _ (Just f) _ _       -> return $ Left f
@@ -242,13 +241,16 @@ expectAction mock pred = do
             writeIORef (mockStatus mock) $ TestStatus bs (Just f) env objs
             makeDef
         Right (env', v) -> do
-            let (TestStatus (_:bs) _ _ objs) = status
+            let (TestStatus testList' _ _ objs) = status
+                bs = case testList' of
+                    _ : bs' -> bs'
+                    [] -> error "empty list"
             writeIORef (mockStatus mock) $ TestStatus bs Nothing env' objs
             return v
 
 expectActionRef :: (TestAction a, MakeDefault b) =>
     ObjRef (MockObj a) -> (a -> IO (Either TestFault b)) -> IO b
-expectActionRef ref pred = expectAction (fromObjRef ref) pred
+expectActionRef ref pred' = expectAction (fromObjRef ref) pred'
 
 checkAction :: (TestAction a, Eq a, MakeDefault b) =>
     MockObj a -> a -> IO b -> IO b
@@ -264,7 +266,7 @@ checkAction mock action next = expectAction mock $ \expected -> do
 badAction :: (MakeDefault b) => MockObj a -> IO b
 badAction mock = do
     status <- readIORef $ mockStatus mock
-    writeIORef (mockStatus mock) $ status {testFault = Just TBadAction} 
+    writeIORef (mockStatus mock) $ status {testFault = Just TBadAction}
     makeDef
 
 forkMockObj :: (TestAction b) => MockObj a -> IO (ObjRef (MockObj b))

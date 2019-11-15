@@ -7,7 +7,6 @@ import Graphics.QML.Test.Framework
 import Graphics.QML.Test.MayGen
 
 import Data.Typeable
-import Data.Proxy
 
 data TestObject deriving Typeable
 

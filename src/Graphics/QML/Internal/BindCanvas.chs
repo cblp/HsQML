@@ -7,7 +7,7 @@ module Graphics.QML.Internal.BindCanvas where
 {#import Graphics.QML.Internal.BindPrim #}
 
 import Foreign.C.Types
-import Foreign.Marshal.Utils
+import Foreign.Marshal.Utils (toBool)
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import Foreign.Storable
@@ -36,10 +36,10 @@ foreign import ccall "wrapper"
 foreign import ccall "wrapper"
   marshalCleanupCb :: CleanupCb -> IO (FunPtr CleanupCb)
 
-foreign import ccall "wrapper"  
+foreign import ccall "wrapper"
   marshalSyncCb :: SyncCb -> IO (FunPtr SyncCb)
 
-foreign import ccall "wrapper"  
+foreign import ccall "wrapper"
   marshalPaintCb :: PaintCb -> IO (FunPtr PaintCb)
 
 foreign import ccall "wrapper"

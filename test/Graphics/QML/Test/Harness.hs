@@ -80,5 +80,5 @@ checkProperty n (TestType pxy) = do
     r <- quickCheckWithResult args $ testProperty . constrainSrc pxy
     return $ isSuccess r
 
-constrainSrc :: (TestAction a) => Proxy a -> TestBoxSrc a -> TestBoxSrc a
+constrainSrc :: Proxy a -> TestBoxSrc a -> TestBoxSrc a
 constrainSrc = flip const

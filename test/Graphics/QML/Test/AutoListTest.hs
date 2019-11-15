@@ -6,13 +6,10 @@ import Graphics.QML.Marshal
 import Graphics.QML.Objects
 import Graphics.QML.Test.Framework
 import Graphics.QML.Test.MayGen
-import Graphics.QML.Test.TestObject
-import Graphics.QML.Test.ScriptDSL (Expr, Prog)
 import qualified Graphics.QML.Test.ScriptDSL as S
 
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Gen
-import Control.Applicative
 import Data.Int
 import Data.Monoid
 import Data.Proxy
@@ -85,7 +82,7 @@ instance TestAction AutoListTest where
 
 instance TestAction AutoList where
     legalActionIn _ _ = True
-    nextActionsFor env = fromGen $ oneof [
+    nextActionsFor _ = fromGen $ oneof [
         SetSource <$> arbitrary,
         SetMode <$> arbitraryBoundedEnum]
     updateEnvRaw _ = testEnvStep

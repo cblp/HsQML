@@ -49,7 +49,6 @@ import Graphics.QML.Internal.BindCore
 import Graphics.QML.Marshal ()
 import Graphics.QML.Objects
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
@@ -100,7 +99,7 @@ runEngineAsync config = RunQML $ do
         DocumentPath res = initialDocument config
         impPaths = importPaths config
         plugPaths = pluginPaths config
-        stopCb = putMVar finishVar () 
+        stopCb = putMVar finishVar ()
     ctxHndl <- sequenceA $ fmap mToHndl obj
     engHndl <- mWithCVal (T.pack res) $ \resPtr ->
         withManyArray0 mWithCVal (map T.pack impPaths) nullPtr $ \impPtr ->
@@ -179,7 +178,7 @@ runEventLoop :: RunQML a -> IO a
 runEventLoop (RunQML runFn) = do
     prog <- getProgName
     args <- getArgs
-    setQtArgs prog args
+    _ <- setQtArgs prog args
     runEventLoopNoArgs . RunQML $ do
         (prog', args') <- getQtArgsIO
         withProgName prog' $ withArgs args' runFn
@@ -202,7 +201,7 @@ runEventLoopNoArgs (RunQML runFn) = tryRunInBoundThread $ do
     status <- hsqmlEvloopRun startCb processJobs yieldCb
     case statusException status of
         Just ex -> throw ex
-        Nothing -> do 
+        Nothing -> do
             finFn <- takeMVar finishVar
             finFn
 
@@ -255,7 +254,7 @@ getQtArgsIO = do
 -- | Represents a Qt application flag.
 data QtFlag
     -- | Enables resource sharing between OpenGL contexts. This must be set in
-    -- order to use QtWebEngine. 
+    -- order to use QtWebEngine.
     = QtShareOpenGLContexts
     deriving Show
 

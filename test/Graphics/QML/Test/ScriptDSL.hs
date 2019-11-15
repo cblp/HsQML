@@ -6,8 +6,7 @@ import Data.Bits
 import Data.Char
 import Data.Int
 import Data.List
-import Data.Monoid
-#if MIN_VERSION_base(4,11,0)
+#if MIN_VERSION_base(4,10,0)
 import Data.Semigroup
 #endif
 import Data.Text (Text)
@@ -18,17 +17,18 @@ data Expr = Global | Expr {unExpr :: ShowS}
 
 data Prog = Prog ShowS ShowS
 
-#if MIN_VERSION_base(4,11,0)
 instance Semigroup Prog where
     (Prog a1 b1) <> (Prog a2 b2) = Prog (a1 . a2) (b2 . b1)
 
 instance Monoid Prog where
     mempty = Prog id id
-#else
-instance Monoid Prog where
-    mempty = Prog id id
+
+#   if MIN_VERSION_base(4,11,0)
+#   elif MIN_VERSION_base(4,10,0)
+    mappend = (<>)
+#   else
     mappend (Prog a1 b1) (Prog a2 b2) = Prog (a1 . a2) (b2 . b1)
-#endif
+#   endif
 
 showProg :: Prog -> ShowS
 showProg (Prog a b) = a . b

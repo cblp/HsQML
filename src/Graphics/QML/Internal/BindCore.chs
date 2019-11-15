@@ -8,7 +8,6 @@ module Graphics.QML.Internal.BindCore where
 {#import Graphics.QML.Internal.BindPrim #}
 {#import Graphics.QML.Internal.BindObj #}
 
-import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Marshal.Utils (fromBool, toBool)
 import Foreign.Ptr
@@ -58,7 +57,7 @@ hsqmlInit = hsqmlInit_ hsFreeFunPtr hsFreeStablePtr
 
 type TrivialCb = IO ()
 
-foreign import ccall "wrapper"  
+foreign import ccall "wrapper"
   marshalTrivialCb :: TrivialCb -> IO (FunPtr TrivialCb)
 
 withTrivialCb :: TrivialCb -> (FunPtr TrivialCb -> IO a) -> IO a

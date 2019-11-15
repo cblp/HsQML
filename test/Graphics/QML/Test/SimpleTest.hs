@@ -10,7 +10,6 @@ import Graphics.QML.Test.ScriptDSL (Expr, Prog)
 import qualified Graphics.QML.Test.ScriptDSL as S
 
 import Test.QuickCheck.Arbitrary
-import Control.Applicative
 import Data.Typeable
 
 import Data.Int
@@ -35,7 +34,7 @@ saveProp v n name = S.saveVar v $ S.var n `S.dot` name
 testProp :: Int -> String -> Expr -> Prog
 testProp n name r = S.assert $ S.eq (S.var n `S.dot` name) r
 
-checkArg :: (Show a, Eq a) => a -> a -> IO (Either TestFault ())
+checkArg :: (Eq a) => a -> a -> IO (Either TestFault ())
 checkArg v w = return $
     if v == w then Right () else Left TBadActionData
 
@@ -60,7 +59,7 @@ instance TestAction SimpleMethods where
     legalActionIn _ _ = True
     nextActionsFor env = mayOneof [
         pure SMTrivial,
-        SMTernary <$> 
+        SMTernary <$>
             fromGen arbitrary <*> fromGen arbitrary <*>
             fromGen arbitrary <*> fromGen arbitrary,
         SMGetInt <$> fromGen arbitrary,

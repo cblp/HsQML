@@ -8,9 +8,7 @@ import Graphics.QML.Test.MayGen
 import qualified Graphics.QML.Test.ScriptDSL as S
 
 import Test.QuickCheck.Gen
-import Control.Applicative
 import Data.Typeable
-import Data.Proxy
 
 data ObjectA
     = OANewB Int
