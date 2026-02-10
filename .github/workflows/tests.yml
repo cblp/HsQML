@@ -54,6 +54,7 @@ jobs:
             ${{ runner.os }}-ghc-${{ matrix.ghc }}-cabal-
 
       - name: Install Qt5 Dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -67,6 +68,13 @@ jobs:
             qml-module-qtmultimedia \
             qttools5-dev-tools \
             qtbase5-dev
+
+      - name: Install Qt5 Dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install qt@5
+        # TODO support qt@6, too
 
       - name: Build
         run: cabal build --enable-tests
