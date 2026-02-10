@@ -40,11 +40,20 @@ main = do
   case lookup "QT_SELECT" env of
     Nothing -> setEnv "QT_SELECT" "5"
     _       -> return ()
+  -- Add extra paths
+  case os of
+    "darwin" -> appendPath "/opt/homebrew/opt/qt@5/bin"
+    _ -> pure ()
   -- Chain standard setup
   defaultMainWithHooks simpleUserHooks {
     confHook = confWithQt, buildHook = buildWithQt,
     copyHook = copyWithQt, instHook = instWithQt,
     regHook = regWithQt}
+
+appendPath :: FilePath -> IO ()
+appendPath p = do
+  paths <- getEnv "PATH"
+  setEnv "PATH" $ paths <> ":" <> p
 
 getCustomStr :: String -> PackageDescription -> String
 getCustomStr name pkgDesc =
