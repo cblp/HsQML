@@ -18,6 +18,7 @@ jobs:
         uses: kleidukos/get-tested@v0.1.7.1
         with:
           cabal-file: hsqml.cabal
+          macos-version: latest
           ubuntu-version: latest
           version: 0.1.7.1
 
