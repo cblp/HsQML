@@ -184,8 +184,5 @@ Test-Suite hsqml-test1
         Graphics.QML.Test.SignalTest
         Graphics.QML.Test.SimpleTest
         Graphics.QML.Test.TestObject
-    if os(darwin) && !flag(UsePkgConfig)
-        -- Library not registered yet
-        GHC-options: -hide-option-framework-path /QT_ROOT/lib
     if flag(ThreadedTestSuite)
         GHC-options: -threaded
