@@ -1,8 +1,10 @@
 #ifndef HSQML_CLASS_H
 #define HSQML_CLASS_H
 
+#include <vector>
 #include <QtCore/QObject>
 #include <QtCore/QAtomicInt>
+#include <QtCore/QMetaType>
 #include <QtCore/QScopedArrayPointer>
 
 #include "hsqml.h"
@@ -36,6 +38,9 @@ private:
     HsQMLUniformFunc* mMethods;
     HsQMLUniformFunc* mProperties;
     QMetaObject mMetaObject;
+#if QT_VERSION >= 0x060000
+    std::vector<const QtPrivate::QMetaTypeInterface*> mMetaTypes;
+#endif
 };
 
 #endif /*HSQML_CLASS_H*/

@@ -1,3 +1,4 @@
+# TODO: Add Qt6 build matrix (mingw-w64-x86_64-qt6-base, qt6-tools, qt6-declarative)
 build: off
 
 install:

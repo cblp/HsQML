@@ -141,7 +141,7 @@ void HsQMLObjectProxy::runFinalisers()
     mFinaliseMutex.unlock();
 
     // Call finalisers outside lock so they can re-addFinaliser()
-    Q_FOREACH(const HsQMLObjectFinaliser::Ref& f, fs) {
+    for (const HsQMLObjectFinaliser::Ref& f : fs) {
         ref(Handle);
         f->finalise(this);
     }
@@ -240,8 +240,12 @@ HsQMLObject::~HsQMLObject()
 
 const QMetaObject* HsQMLObject::metaObject() const
 {
+#if QT_VERSION >= 0x060000
+    return mKlass->metaObj();
+#else
     return QObject::d_ptr->metaObject ?
         QObject::d_ptr->dynamicMetaObject() : mKlass->metaObj();
+#endif
 }
 
 void* HsQMLObject::qt_metacast(const char* clname)
@@ -277,6 +281,7 @@ int HsQMLObject::qt_metacall(QMetaObject::Call c, int id, void** a)
         }
         id -= mKlass->propertyCount();
     }
+#if QT_VERSION < 0x060000
     else if (QMetaObject::QueryPropertyDesignable == c ||
              QMetaObject::QueryPropertyScriptable == c ||
              QMetaObject::QueryPropertyStored == c ||
@@ -284,6 +289,7 @@ int HsQMLObject::qt_metacall(QMetaObject::Call c, int id, void** a)
              QMetaObject::QueryPropertyUser == c) {
         id -= mKlass->propertyCount();
     }
+#endif
     gManager->setActiveEngine(NULL);
     return id;
 }

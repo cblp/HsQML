@@ -36,6 +36,7 @@ module Graphics.QML.Engine (
     QtEnableQMLDebug),
   setQtFlag,
   getQtFlag,
+  qtVersion,
   shutdownQt,
   EventLoopException(),
 
@@ -59,10 +60,10 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import qualified Data.Text as T
-import Data.List
+import Data.List (intercalate)
 import Data.Traversable (sequenceA)
 import Data.Typeable
-import Foreign.C.String (CString, withCString)
+import Foreign.C.String (withCString)
 import Foreign.C.Types (CChar)
 import Foreign.Marshal.Array
 import Foreign.Ptr
@@ -113,7 +114,7 @@ runEngineAsync config = RunQML $ do
         DocumentPath res = initialDocument config
         impPaths = importPaths config
         plugPaths = pluginPaths config
-        stopCb = putMVar finishVar () 
+        stopCb = putMVar finishVar ()
 
     ctxHndl <- sequenceA $ fmap mToHndl obj
     engHndl <- mWithCVal (T.pack res) $ \resPtr ->
@@ -221,7 +222,7 @@ runEventLoopNoArgs (RunQML runFn) = tryRunInBoundThread $ do
     status <- hsqmlEvloopRun startCb processJobs yieldCb
     case statusException status of
         Just ex -> throw ex
-        Nothing -> do 
+        Nothing -> do
             finFn <- takeMVar finishVar
             finFn
 
@@ -274,7 +275,7 @@ getQtArgsIO = do
 -- | Represents a Qt application flag.
 data QtFlag
     -- | Enables resource sharing between OpenGL contexts. This must be set in
-    -- order to use QtWebEngine. 
+    -- order to use QtWebEngine.
     = QtShareOpenGLContexts
     | QtEnableQMLDebug
     deriving Show
@@ -295,6 +296,15 @@ setQtFlag flag val = do
 -- | Gets the state of one of the application flags used by Qt.
 getQtFlag :: QtFlag -> RunQML Bool
 getQtFlag = RunQML . hsqmlGetFlag . internalFlag
+
+-- | Gets the version of Qt that the library was compiled against as a
+-- tuple @(major, minor, patch)@. For example, Qt 5.15.2 returns @(5, 15, 2)@.
+qtVersion :: IO (Int, Int, Int)
+qtVersion = do
+    major <- hsqmlGetQtVersionMajor
+    minor <- hsqmlGetQtVersionMinor
+    patch <- hsqmlGetQtVersionPatch
+    return (major, minor, patch)
 
 -- | Shuts down and frees resources used by the Qt framework, preventing
 -- further use of the event loop. The framework is initialised when

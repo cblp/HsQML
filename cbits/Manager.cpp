@@ -10,6 +10,10 @@
 #include <QtCore/QLoggingCategory>
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
+#if QT_VERSION >= 0x060000
+#include <QtQuick/QQuickWindow>
+#include <QtQuick/QSGRendererInterface>
+#endif
 #ifdef Q_OS_MAC
 #include <pthread.h>
 #endif
@@ -23,11 +27,13 @@
 #include "Object.h"
 
 // Declarations for part of Qt's internal API
+#if QT_VERSION < 0x060000
 Q_DECL_IMPORT const QVariant::Handler* qcoreVariantHandler();
 namespace QVariantPrivate {
 Q_DECL_IMPORT void registerHandler(
     const int name, const QVariant::Handler *handler);
 }
+#endif
 
 static const char* cCounterNames[] = {
     "ClassCounter",
@@ -57,13 +63,14 @@ static void dump_counters()
     Q_ASSERT (gManager);
     if (gManager->checkLogLevel(1)) {
         for (int i=0; i<HsQMLManager::TotalCounters; i++) {
-            gManager->log(QString().sprintf("%s = %d.",
+            gManager->log(QString::asprintf("%s = %d.",
                 cCounterNames[i], gManager->updateCounter(
                     static_cast<HsQMLManager::CounterId>(i), 0)));
         }
     }
 }
 
+#if QT_VERSION < 0x060000
 static void hooked_construct(QVariant::Private* p, const void* copy)
 {
     gManager->hookedConstruct(p, copy);
@@ -73,6 +80,7 @@ static void hooked_clear(QVariant::Private* p)
 {
     gManager->hookedClear(p);
 }
+#endif
 
 ManagerPointer gManager;
 
@@ -83,9 +91,13 @@ HsQMLManager::HsQMLManager(
     , mAtExit(false)
     , mFreeFun(freeFun)
     , mFreeStable(freeStable)
+#if QT_VERSION < 0x060000
     , mOriginalHandler(qcoreVariantHandler())
+#endif
     , mApp(NULL)
+#if QT_VERSION < 0x060000
     , mLock(QMutex::Recursive)
+#endif
     , mRunning(false)
     , mRunCount(0)
     , mShutdown(false)
@@ -155,7 +167,7 @@ bool HsQMLManager::setArgs(const QStringList& args)
     mArgs.reserve(args.size());
     mArgsPtrs.clear();
     mArgsPtrs.reserve(args.size());
-    Q_FOREACH(const QString& arg, args) {
+    for (const QString& arg : args) {
         mArgs << arg.toLocal8Bit(); 
         mArgsPtrs << mArgs.last().data();
     }
@@ -174,9 +186,13 @@ bool HsQMLManager::setFlag(HsQMLGlobalFlag flag, bool value)
     }
 
     switch (flag) {
-#if QT_VERSION >= 0x050400
+#if QT_VERSION >= 0x050400 && QT_VERSION < 0x060000
     case HSQML_GFLAG_SHARE_OPENGL_CONTEXTS:
         QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts, value);
+        return true;
+#elif QT_VERSION >= 0x060000
+    case HSQML_GFLAG_SHARE_OPENGL_CONTEXTS:
+        // In Qt6, OpenGL context sharing is handled by the rendering backend.
         return true;
 #endif
     case HSQML_GFLAG_ENABLE_QML_DEBUG:
@@ -189,9 +205,12 @@ bool HsQMLManager::setFlag(HsQMLGlobalFlag flag, bool value)
 bool HsQMLManager::getFlag(HsQMLGlobalFlag flag)
 {
     switch (flag) {
-#if QT_VERSION >= 0x050400
+#if QT_VERSION >= 0x050400 && QT_VERSION < 0x060000
     case HSQML_GFLAG_SHARE_OPENGL_CONTEXTS:
         return QCoreApplication::testAttribute(Qt::AA_ShareOpenGLContexts);
+#elif QT_VERSION >= 0x060000
+    case HSQML_GFLAG_SHARE_OPENGL_CONTEXTS:
+        return true; // Always available in Qt6 with OpenGL backend
 #endif
     case HSQML_GFLAG_ENABLE_QML_DEBUG:
         return mQmlDebugEnabled;
@@ -210,6 +229,7 @@ void HsQMLManager::unregisterObject(const QObject* obj)
     Q_ASSERT(removed);
 }
 
+#if QT_VERSION < 0x060000
 void HsQMLManager::hookedConstruct(QVariant::Private* p, const void* copy)
 {
     char guard;
@@ -248,6 +268,7 @@ void HsQMLManager::hookedClear(QVariant::Private* p)
     }
     mOriginalHandler->clear(p);
 }
+#endif
 
 bool HsQMLManager::isEventThread()
 {
@@ -425,13 +446,18 @@ HsQMLManager::EventLoopStatus HsQMLManager::shutdown()
 }
 
 HsQMLManagerApp::HsQMLManagerApp()
+#if QT_VERSION < 0x060000
     : mHookedHandler(*gManager->mOriginalHandler)
     , mArgC(gManager->argsPtrs().size())
+#else
+    : mArgC(gManager->argsPtrs().size())
+#endif
     , mApp(mArgC, gManager->argsPtrs().data())
 {
     gManager->argsPtrs().resize(mArgC);
 
     // Only enable debugging if the flag is set
+#if QT_VERSION < 0x060000
     if (gManager->getFlag(HSQML_GFLAG_ENABLE_QML_DEBUG)) {
         QQmlDebuggingEnabler enabler(true);
 
@@ -456,15 +482,33 @@ HsQMLManagerApp::HsQMLManagerApp()
             qDebug() << "Debug port 3768 is available";
         }
     }
+#else
+    // TODO: Implement Qt6 QML debugging support.
+    // Qt6 changed the QQmlDebuggingEnabler API.
+    if (gManager->getFlag(HSQML_GFLAG_ENABLE_QML_DEBUG)) {
+        qDebug() << "QML debugging is not yet supported with Qt6.";
+    }
+#endif
 
     mApp.setQuitOnLastWindowClosed(false);
 
+#if QT_VERSION >= 0x060000
+    // Force OpenGL rendering backend for Canvas compatibility
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
+
     // Install hooked handler for QVariants
+#if QT_VERSION < 0x060000
     mHookedHandler.construct = &hooked_construct;
     mHookedHandler.clear = &hooked_clear;
     QVariantPrivate::registerHandler(0, &mHookedHandler);
+#endif
+    // In Qt6, we rely on QQmlEngine::setObjectOwnership() and the GCLock
+    // mechanism (QJSValue) in Object.cpp to prevent premature GC.
 
     // Register custom types
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     qmlRegisterType<HsQMLCanvas>("HsQML.Canvas", 1, 0, "HaskellCanvas");
     qmlRegisterType<HsQMLContextControl>(
         "HsQML.Canvas", 1, 0, "OpenGLContextControl");
@@ -472,6 +516,7 @@ HsQMLManagerApp::HsQMLManagerApp()
         "HsQML.Model", 1, 0, "AutoListModel");
     qmlRegisterType<HsQMLClipboardHelper>(
         "HsQML.Clipboard", 1, 0, "ClipboardHelper");
+QT_WARNING_POP
 }
 
 HsQMLManagerApp::~HsQMLManagerApp()
@@ -629,4 +674,19 @@ extern "C" void hsqml_set_window_icon(const char* iconPath) {
     if (gManager) {
         gManager->setWindowIcon(QString::fromUtf8(iconPath));
     }
+}
+
+extern "C" int hsqml_get_qt_version_major()
+{
+    return QT_VERSION_MAJOR;
+}
+
+extern "C" int hsqml_get_qt_version_minor()
+{
+    return QT_VERSION_MINOR;
+}
+
+extern "C" int hsqml_get_qt_version_patch()
+{
+    return QT_VERSION_PATCH;
 }

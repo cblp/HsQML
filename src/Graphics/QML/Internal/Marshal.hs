@@ -11,7 +11,7 @@ import Graphics.QML.Internal.BindPrim
 import Graphics.QML.Internal.BindObj
 
 import Prelude hiding (catch)
-import Control.Exception (SomeException(SomeException), catch)
+import Control.Exception (SomeException, catch)
 import Control.Monad (when)
 import Control.Monad.Trans.Maybe
 import Data.Maybe

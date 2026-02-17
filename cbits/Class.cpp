@@ -34,6 +34,22 @@ HsQMLClass::HsQMLClass(
     // Create string data
     unsigned int strCount = metaStrInfo[0];
     unsigned int strLength = metaStrInfo[strCount];
+#if QT_VERSION >= 0x060000
+    // Qt6 format: array of uint offset/size pairs followed by string chars.
+    // Each pair: [offset_from_start, length_excluding_null]
+    size_t headerSize = strCount * 2 * sizeof(uint);
+    size_t totalSize = headerSize + strLength;
+    mMetaStrData.reset(new char[totalSize]);
+    uint* header = reinterpret_cast<uint*>(mMetaStrData.data());
+    for (unsigned int i = 0; i < strCount; i++) {
+        int start = i > 0 ? metaStrInfo[i] : 0;
+        int size = metaStrInfo[i+1] - start - 1; // exclude null terminator
+        header[2*i]   = headerSize + start;       // offset from start of buffer
+        header[2*i+1] = size;                     // length
+    }
+    std::memcpy(&mMetaStrData[headerSize], metaStrChar, strLength);
+#else
+    // Qt5 format: array of QByteArrayData followed by string chars.
     size_t arrayOff = strCount*sizeof(QByteArrayData);
     size_t arraySize = arrayOff+strLength;
     mMetaStrData.reset(new char[arraySize]);
@@ -47,14 +63,55 @@ HsQMLClass::HsQMLClass(
             &data, sizeof(QByteArrayData));
     }
     std::memcpy(&mMetaStrData[arrayOff], metaStrChar, strLength);
+#endif
+
+    // Build metaTypes array for Qt6
+    // Layout: [property types] [method types (return + params for each)]
+#if QT_VERSION >= 0x060000
+    {
+        int propDataIdx = mMetaData[7];  // property data offset
+        for (int i = 0; i < mPropertyCount; i++) {
+            uint typeVal = mMetaData[propDataIdx + i * 5 + 1];
+            mMetaTypes.push_back(QMetaType(int(typeVal)).iface());
+        }
+
+        int methDataIdx = mMetaData[5];  // method data offset
+        int totalMethods = mMetaData[4]; // method count (signals + methods)
+        for (int i = 0; i < totalMethods; i++) {
+            int base = methDataIdx + i * 6;
+            int argc = mMetaData[base + 1];
+            int paramsIdx = mMetaData[base + 2];
+
+            // Return type
+            mMetaTypes.push_back(QMetaType(int(mMetaData[paramsIdx])).iface());
+            // Param types
+            for (int j = 1; j <= argc; j++) {
+                mMetaTypes.push_back(
+                    QMetaType(int(mMetaData[paramsIdx + j])).iface());
+            }
+        }
+    }
+#endif
 
     // Create meta-object
-    QMetaObject metaObj = {
+#if QT_VERSION >= 0x060000
+    QMetaObject metaObj = {{
+          &QObject::staticMetaObject,
+          reinterpret_cast<const uint*>(mMetaStrData.data()),
+          mMetaData,
+          nullptr,
+          nullptr,
+          mMetaTypes.data(),
+          nullptr}};
+#else
+    QMetaObject metaObj = {{
           &QObject::staticMetaObject,
           reinterpret_cast<QByteArrayData*>(mMetaStrData.data()),
           mMetaData,
-          0,
-          0};
+          nullptr,
+          nullptr,
+          nullptr}};
+#endif
     mMetaObject = metaObj;
 
     // Add reference
@@ -106,7 +163,7 @@ void HsQMLClass::ref(RefSrc src)
     int count = mRefCount.fetchAndAddOrdered(1);
 
     HSQML_LOG(count == 0 ? 1 : 2,
-        QString().sprintf("%s Class, name=%s, src=%s, count=%d.",
+        QString::asprintf("%s Class, name=%s, src=%s, count=%d.",
         count ? "Ref" : "New", name(), cRefSrcNames[src], count+1));
 }
 
@@ -115,7 +172,7 @@ void HsQMLClass::deref(RefSrc src)
     int count = mRefCount.fetchAndAddOrdered(-1);
 
     HSQML_LOG(count == 1 ? 1 : 2,
-        QString().sprintf("%s Class, name=%s, src=%s, count=%d.",
+        QString::asprintf("%s Class, name=%s, src=%s, count=%d.",
         count > 1 ? "Deref" : "Delete", name(), cRefSrcNames[src], count));
 
     if (count == 1) {

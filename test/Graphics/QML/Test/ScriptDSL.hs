@@ -5,7 +5,7 @@ module Graphics.QML.Test.ScriptDSL where
 import Data.Bits
 import Data.Char
 import Data.Int
-import Data.List
+import Data.List (intersperse)
 import Data.Monoid
 #if MIN_VERSION_base(4,11,0)
 import Data.Semigroup

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Graphics.QML.Internal.MetaObj where
 
 import Graphics.QML.Internal.Types
@@ -88,14 +89,19 @@ data MOCState = MOCState {
   mFuncProperties  :: CRList (Maybe UniformFunc),
   mMethodCount     :: Int,
   mSignalCount     :: Int,
-  mPropertyCount   :: Int
+  mPropertyCount   :: Int,
+  mMetaTypeOffset  :: Int
 }
 
 -- | Generate MOC meta-data from a class name and member list.
 compileClass :: String -> [Member tt] -> MOCState
 compileClass name ms = 
   let enc = flip execState (newMOCState enc) $ do
-        writeInt 7                           -- Revision
+#ifdef HSQML_USE_QT6
+        writeInt 13                          -- Revision (Qt 6.10+)
+#else
+        writeInt 7                           -- Revision (Qt 5)
+#endif
         writeString name                     -- Class name
         writeInt 0 >> writeInt 0             -- Class info
         writeIntegral $
@@ -117,7 +123,9 @@ compileClass name ms =
         let pms = filterMembers ConstPropertyMember ms ++
                   filterMembers PropertyMember ms
         mapM_ writeProperty pms
+#ifndef HSQML_USE_QT6
         mapM_ writePropertySig pms
+#endif
         writeInt 0
   in enc
 
@@ -127,7 +135,7 @@ filterMembers k = filter (\m -> k == memberKind m)
 newMOCState :: MOCState -> MOCState
 newMOCState enc = MOCState
     crlEmpty Nothing Nothing crlEmpty (crlSingle strCount) Map.empty
-    Map.empty Map.empty crlEmpty crlEmpty 0 0 0
+    Map.empty Map.empty crlEmpty crlEmpty 0 0 0 (mPropertyCount enc)
     where strCount = fromIntegral $ Map.size $ mStrMap enc
  
 writeInt :: CUInt -> State MOCState ()
@@ -180,13 +188,18 @@ writeMethod m = do
   idx <- get >>= return . crlLen . mData
   paramMap <- get >>= return . mParamMap
   writeString $ memberName m
-  writeIntegral $ length $ memberParams m
+  let argc = length $ memberParams m
+  writeIntegral argc
   writeInt $ fromMaybe 0 $ flip Map.lookup paramMap $ memberTypes m
   writeString ""
   let (mc,sc,flags) = case memberKind m of
         SignalMember -> (0,1,mfMethodSignal)
         _            -> (1,0,mfMethodMethod)
   writeInt (mfAccessPublic .|. mfMethodScriptable .|. flags)
+#ifdef HSQML_USE_QT6
+  metaOffset <- get >>= return . mMetaTypeOffset
+  writeIntegral metaOffset
+#endif
   state <- get
   put $ state {
     mDataMethodsIdx = mplus (mDataMethodsIdx state) (Just idx),
@@ -195,7 +208,8 @@ writeMethod m = do
     mSigMap = maybe (mSigMap state) (\k ->
       Map.insert k (fromIntegral $ mSignalCount state) (mSigMap state)) $
       memberKey m,
-    mFuncMethods = mFuncMethods state `crlAppend1` (Just $ memberFun m)}
+    mFuncMethods = mFuncMethods state `crlAppend1` (Just $ memberFun m),
+    mMetaTypeOffset = mMetaTypeOffset state + 1 + argc}
   return ()
 
 writeProperty :: Member tt -> State MOCState ()
@@ -207,6 +221,14 @@ writeProperty p = do
     (if ConstPropertyMember == memberKind p then pfConstant else 0) .|.
     (if isJust (memberFunAux p) then pfWritable else 0) .|.
     (if isJust (memberKey p) then pfNotify else 0))
+#ifdef HSQML_USE_QT6
+  -- Qt6: notifyIndex (inline, 4th field)
+  state0 <- get
+  writeInt $ fromMaybe 0 $ maybe Nothing (flip Map.lookup $ mSigMap state0) $
+    memberKey p
+  -- Qt6: revision (5th field)
+  writeInt 0
+#endif
   state <- get
   put $ state {
     mDataPropsIdx = mplus (mDataPropsIdx state) (Just idx),

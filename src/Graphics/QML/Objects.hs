@@ -259,10 +259,6 @@ instance MethodSuffix VoidIO where
     mkMethodFunc _ f _ = errIO $ runVoidIO f
     mkMethodTypes = Tagged $ MethodTypeInfo [] tyVoid
 
-class IsVoidIO a
-instance (IsVoidIO b) => IsVoidIO (a -> b)
-instance IsVoidIO VoidIO
-
 mkSpecialFunc
   :: forall tt ms.
     ( Marshal tt
@@ -367,7 +363,7 @@ data SignalData = SignalData HsQMLObjectHandle Int
 -- type parameter @p@ specifies the signal's signature.
 newtype SignalKey p = SignalKey Unique
 
--- | Creates a new 'SignalKey'. 
+-- | Creates a new 'SignalKey'.
 newSignalKey :: IO (SignalKey p)
 newSignalKey = fmap SignalKey newUnique
 

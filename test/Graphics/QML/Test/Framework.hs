@@ -158,7 +158,7 @@ instance (TestAction a) => Arbitrary (TestBoxSrc a) where
         where env = newTestEnv $ TestType (Proxy :: Proxy a)
 
 mockFromSrc :: forall a. (TestAction a) => TestBoxSrc a -> IO (MockObj a)
-mockFromSrc (TestBoxSrc ts) = do 
+mockFromSrc (TestBoxSrc ts) = do
     statusRef <- newIORef $ TestStatus ts Nothing
         (newTestEnv $ TestType (Proxy :: Proxy a)) IntMap.empty
     return $ MockObj (Serial 0) statusRef
@@ -242,7 +242,7 @@ expectAction mock pred = do
             writeIORef (mockStatus mock) $ TestStatus bs (Just f) env objs
             makeDef
         Right (env', v) -> do
-            let (TestStatus (_:bs) _ _ objs) = status
+            let TestStatus (_:bs) _ _ objs = status
             writeIORef (mockStatus mock) $ TestStatus bs Nothing env' objs
             return v
 
@@ -264,7 +264,7 @@ checkAction mock action next = expectAction mock $ \expected -> do
 badAction :: (MakeDefault b) => MockObj a -> IO b
 badAction mock = do
     status <- readIORef $ mockStatus mock
-    writeIORef (mockStatus mock) $ status {testFault = Just TBadAction} 
+    writeIORef (mockStatus mock) $ status {testFault = Just TBadAction}
     makeDef
 
 forkMockObj :: (TestAction b) => MockObj a -> IO (ObjRef (MockObj b))

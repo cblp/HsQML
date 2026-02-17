@@ -146,7 +146,7 @@ data OpenGLPaint s m = OpenGLPaint {
 -- | Specialised version of `OpenGLPaint` with no model.
 type OpenGLPaint' s = OpenGLPaint s Ignored
 
-newOpenGLCallbacks :: (Marshal m, CanGetFrom m ~ Yes) =>
+newOpenGLCallbacks :: (Marshal m) =>
     (OpenGLSetup -> IO i) -> (OpenGLPaint i m -> IO ()) -> (i -> IO ()) ->
     CallbacksFactory
 newOpenGLCallbacks setupFn paintFn cleanupFn = do
@@ -173,7 +173,7 @@ newOpenGLCallbacks setupFn paintFn cleanupFn = do
     return (setupCb, cleanupCb, syncCb, paintCb)
 
 -- | Creates a new 'OpenGLDelegate' from setup, paint, and cleanup functions.
-newOpenGLDelegate :: (Marshal m, CanGetFrom m ~ Yes) =>
+newOpenGLDelegate :: (Marshal m) =>
     (OpenGLSetup -> IO i) -> (OpenGLPaint i m -> IO ()) -> (i -> IO ()) ->
     IO OpenGLDelegate
 newOpenGLDelegate setupFn paintFn cleanupFn = do

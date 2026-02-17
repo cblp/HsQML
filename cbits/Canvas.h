@@ -8,7 +8,11 @@
 #include <QtCore/QSharedData>
 #include <QtGui/qopengl.h>
 #include <QtGui/QOpenGLContext>
+#if QT_VERSION >= 0x060000
+#include <QtOpenGL/QOpenGLFramebufferObject>
+#else
 #include <QtGui/QOpenGLFramebufferObject>
+#endif
 #include <QtQuick/QQuickItem>
 
 #include "hsqml.h"
@@ -88,8 +92,10 @@ Q_DECLARE_METATYPE(HsQMLWindowInfo)
 class HsQMLCanvas : public QQuickItem
 {
     Q_OBJECT
+#if QT_VERSION < 0x060000
     Q_ENUMS(Status)
     Q_ENUMS(DisplayMode)
+#endif
     Q_PROPERTY(DisplayMode displayMode READ displayMode WRITE setDisplayMode
         NOTIFY displayModeChanged)
     Q_PROPERTY(qreal canvasWidth READ canvasWidth WRITE setCanvasWidth
@@ -104,7 +110,13 @@ class HsQMLCanvas : public QQuickItem
 
 public:
     enum Status {Okay, BadDelegate, BadModel, BadConfig, BadProcs, BadBind};
+#if QT_VERSION >= 0x060000
+    Q_ENUM(Status)
+#endif
     enum DisplayMode {Above, Below, Inline};
+#if QT_VERSION >= 0x060000
+    Q_ENUM(DisplayMode)
+#endif
 
     HsQMLCanvas(QQuickItem* = NULL);
     ~HsQMLCanvas();
@@ -112,8 +124,12 @@ public:
 private:
     Q_DISABLE_COPY(HsQMLCanvas);
 
-    void geometryChanged(const QRectF&, const QRectF&) Q_DECL_OVERRIDE;
-    QSGNode* updatePaintNode(QSGNode*, UpdatePaintNodeData*) Q_DECL_OVERRIDE;
+#if QT_VERSION >= 0x060000
+    void geometryChange(const QRectF&, const QRectF&) override;
+#else
+    void geometryChanged(const QRectF&, const QRectF&) override;
+#endif
+    QSGNode* updatePaintNode(QSGNode*, UpdatePaintNodeData*) override;
     void detachBackEnd();
     DisplayMode displayMode() const;
     void setDisplayMode(DisplayMode);
@@ -204,8 +220,10 @@ private:
 class HsQMLContextControl : public QQuickItem
 {
     Q_OBJECT
+#if QT_VERSION < 0x060000
     Q_ENUMS(ContextType)
     Q_ENUMS(ContextProfile)
+#endif
     Q_PROPERTY(int majorVersion READ majorVersion WRITE setMajorVersion
         RESET unsetMajorVersion NOTIFY contextChanged);
     Q_PROPERTY(int minorVersion READ minorVersion WRITE setMinorVersion
@@ -233,12 +251,18 @@ public:
         OpenGL      = QSurfaceFormat::OpenGL,
         OpenGLES    = QSurfaceFormat::OpenGLES
     };
+#if QT_VERSION >= 0x060000
+    Q_ENUM(ContextType)
+#endif
     enum ContextProfile {
         ProfileUnset         = -1,
         NoProfile            = QSurfaceFormat::NoProfile,
         CoreProfile          = QSurfaceFormat::CoreProfile,
         CompatibilityProfile = QSurfaceFormat::CompatibilityProfile
     };
+#if QT_VERSION >= 0x060000
+    Q_ENUM(ContextProfile)
+#endif
 
     HsQMLContextControl(QQuickItem* = NULL);
     ~HsQMLContextControl();

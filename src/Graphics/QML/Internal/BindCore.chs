@@ -117,3 +117,12 @@ newEngineHandle p = do
 {#fun unsafe hsqml_set_debug_loglevel as ^
   {fromIntegral `Int'} -> `()'
   #}
+
+{#fun unsafe hsqml_get_qt_version_major as ^
+  {} -> `Int' fromIntegral #}
+
+{#fun unsafe hsqml_get_qt_version_minor as ^
+  {} -> `Int' fromIntegral #}
+
+{#fun unsafe hsqml_get_qt_version_patch as ^
+  {} -> `Int' fromIntegral #}

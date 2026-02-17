@@ -207,6 +207,10 @@ extern int hsqml_get_flag(HsQMLGlobalFlag);
 
 extern void hsqml_set_debug_loglevel(int);
 
+extern int hsqml_get_qt_version_major();
+extern int hsqml_get_qt_version_minor();
+extern int hsqml_get_qt_version_patch();
+
 /* Engine */
 typedef char HsQMLEngineHandle;
 

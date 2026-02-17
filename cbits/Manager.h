@@ -34,7 +34,7 @@ public:
         ObjectSerial,
         EngineSerial,
         TotalCounters
-    }; 
+    };
 
     HsQMLManager(
         void (*)(HsFunPtr),
@@ -51,8 +51,10 @@ public:
     bool getFlag(HsQMLGlobalFlag);
     void registerObject(const QObject*);
     void unregisterObject(const QObject*);
+#if QT_VERSION < 0x060000
     void hookedConstruct(QVariant::Private*, const void*);
     void hookedClear(QVariant::Private*);
+#endif
     bool isEventThread();
     typedef HsQMLEventLoopStatus EventLoopStatus;
     EventLoopStatus runEventLoop(
@@ -81,9 +83,15 @@ private:
     QVector<char*> mArgsPtrs;
     QSet<const QObject*> mObjectSet;
     QVector<HsQMLClass*> mZombieClasses;
+#if QT_VERSION < 0x060000
     const QVariant::Handler* mOriginalHandler;
+#endif
     HsQMLManagerApp* mApp;
+#if QT_VERSION >= 0x060000
+    QRecursiveMutex mLock;
+#else
     QMutex mLock;
+#endif
     bool mRunning;
     int mRunCount;
     bool mShutdown;
@@ -129,7 +137,9 @@ public:
 private:
     Q_DISABLE_COPY(HsQMLManagerApp)
 
+#if QT_VERSION < 0x060000
     QVariant::Handler mHookedHandler;
+#endif
     int mArgC;
     QApplication mApp;
 };
@@ -139,12 +149,12 @@ class ManagerPointer : public QAtomicPointer<HsQMLManager>
 public:
     HsQMLManager* operator->() const
     {
-        return load();
+        return loadRelaxed();
     }
 
     operator HsQMLManager*() const
     {
-        return load();
+        return loadRelaxed();
     }
 };
 

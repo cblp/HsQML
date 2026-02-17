@@ -24,25 +24,26 @@ import Distribution.Simple.Utils
 import Distribution.System
 import Distribution.Text
 import Distribution.Types.CondTree
+import Distribution.Types.Flag
 import Distribution.Types.LocalBuildInfo
 import Distribution.Verbosity
+import Distribution.Version (versionNumbers)
 
 import System.Environment
 import System.FilePath
+import System.IO.Error (tryIOError)
 import System.Info (os)
 
 import Text.Read (readMaybe)
 
 main :: IO ()
 main = do
-  -- If system uses qtchooser(1) then encourage it to choose Qt 5
-  env <- getEnvironment
-  case lookup "QT_SELECT" env of
-    Nothing -> setEnv "QT_SELECT" "5"
-    _       -> return ()
-  -- Add extra paths
+  -- Add extra paths (Qt6 first so it is preferred if both are installed)
   case os of
-    "darwin" -> appendPath "/opt/homebrew/opt/qt@5/bin"
+    "darwin" -> do
+      appendPath "/opt/homebrew/opt/qt@6/share/qt/libexec"
+      appendPath "/opt/homebrew/opt/qt@6/bin"
+      appendPath "/opt/homebrew/opt/qt@5/bin"
     _ -> pure ()
   -- Chain standard setup
   defaultMainWithHooks simpleUserHooks {
@@ -75,8 +76,17 @@ confWithQt :: (GenericPackageDescription, HookedBuildInfo) -> ConfigFlags ->
   IO LocalBuildInfo
 confWithQt (gpd,hbi) flags = do
   let verb = fromFlag $ configVerbosity flags
+      useQt6 = fromMaybe False $
+        lookupFlagAssignment (mkFlagName "useqt6") $
+        configConfigurationsFlags flags
+      mocProg = if useQt6 then mocProgramQt6 else mocProgramQt5
+      vRange = if useQt6
+        then intersectVersionRanges
+          (orLaterVersion $ mkVersion [6,0]) (earlierVersion $ mkVersion [7,0])
+        else intersectVersionRanges
+          (orLaterVersion $ mkVersion [5,0]) (earlierVersion $ mkVersion [6,0])
   mocPath <- (fmap . fmap) fst $
-    programFindLocation mocProgram verb defaultProgramSearchPath
+    programFindLocation mocProg verb defaultProgramSearchPath
   cppPath <- (fmap . fmap) fst $
     findProgramOnSearchPath verb defaultProgramSearchPath "cpp"
   let mapLibBI = fmap $ mapCondTree (mapBI $ substPaths mocPath cppPath) id id
@@ -88,7 +98,7 @@ confWithQt (gpd,hbi) flags = do
   lbi <- confHook simpleUserHooks (gpd',hbi) flags
   -- Find Qt moc program and store in database
   (_,_,db') <- requireProgramVersion verb
-    mocProgram qtVersionRange (withPrograms lbi)
+    mocProg vRange (withPrograms lbi)
   -- Force enable GHCi workaround library if flag set and not using shared libs
   let forceGHCiLib =
         (getCustomFlag xForceGHCiLib $ localPkgDescr lbi) &&
@@ -110,7 +120,16 @@ mapPerCompilerFlavor f (PerCompilerFlavor gcc other) = PerCompilerFlavor (map f 
 substPaths :: Maybe FilePath -> Maybe FilePath -> BuildInfo -> BuildInfo
 substPaths mocPath cppPath build =
   let toRoot path = takeDirectory (takeDirectory (fromMaybe "" path))
-      qtRoot = toRoot mocPath
+      qtRoot =
+        let p1 = takeDirectory (fromMaybe "" mocPath)
+            p2 = takeDirectory p1
+            p3 = takeDirectory p2
+            p4 = takeDirectory p3
+        in case (takeFileName p3, takeFileName p2, takeFileName p1) of
+            -- Homebrew Qt6: <root>/share/qt/libexec/moc
+            ("share", "qt", "libexec") -> p4
+            -- Standard: <root>/bin/moc
+            _ -> p2
       sysRoot = toRoot cppPath
       replacePath :: FilePath -> FilePath
       replacePath path
@@ -124,6 +143,7 @@ substPaths mocPath cppPath build =
       includeDirs = map replacePath (includeDirs build),
       extraLibDirs = map replacePath (extraLibDirs build),
       ccOptions = map replacePath (ccOptions build),
+      cxxOptions = map replacePath (cxxOptions build),
       cppOptions = map replaceOption (cppOptions build),
       extraFrameworkDirs = map replacePath (extraFrameworkDirs build),
       sharedOptions = mapPerCompilerFlavor replaceOption (sharedOptions build)
@@ -147,7 +167,7 @@ buildWithQt pkgDesc lbi hooks flags = do
 
 fixQtBuild :: Verbosity -> LocalBuildInfo -> BuildInfo -> IO BuildInfo
 fixQtBuild verb lbi build = do
-  let moc  = fromJust $ lookupProgram mocProgram $ withPrograms lbi
+  let moc  = fromJust $ lookupProgram mocProgramQt5 $ withPrograms lbi
       option name = words $ fromMaybe "" $ lookup name $ customFieldsBI build
       incs = option xMocHeaders
       bDir = buildDir lbi
@@ -155,7 +175,7 @@ fixQtBuild verb lbi build = do
         bDir </> (takeDirectory inc) </>
         ("moc_" ++ (takeBaseName inc) ++ ".cpp")) incs
       args = map ("-I"++) (includeDirs build) ++
-             map ("-F"++) (option xFrameworkDirs)
+             map ("-F"++) (option xFrameworkDirs ++ extraFrameworkDirs build)
   -- Run moc on each of the header files containing QObject subclasses
   mapM_ (\(i,o) -> do
       createDirectoryIfMissingVerbose verb True (takeDirectory o)
@@ -212,24 +232,51 @@ buildGHCiFix verb pkgDesc lbi lib =
       (map ((bDir </>) . flip replaceExtension objExtension) $ cxxSources bi))
     return ()
 
-mocProgram :: Program
-mocProgram = Program {
+mocProgramQt5 :: Program
+mocProgramQt5 = makeMocProgram ["moc-qt5", "moc", "moc-qt6"] 5
+
+mocProgramQt6 :: Program
+mocProgramQt6 = makeMocProgram ["moc-qt6", "moc", "moc-qt5"] 6
+
+getMocVersion :: Verbosity -> FilePath -> IO (Maybe Version)
+getMocVersion verb path = do
+  (oLine, eLine, _) <-
+    rawSystemStdInOut verb path ["-v"] Nothing Nothing Nothing IODataModeText
+  return $ do
+    name <-
+      msum
+        [ findSubseq (stripPrefix p) l
+        | (p, l) <-
+            [ ("(Qt ", eLine)
+            , ("moc-qt6 ", oLine)
+            , ("moc-qt5 ", oLine)
+            , ("moc ", oLine)
+            ]
+        ]
+    simpleParse $ takeWhile (\c -> isDigit c || c == '.') name
+
+makeMocProgram :: [String] -> Int -> Program
+makeMocProgram names majorVer = Program {
   programName = "moc",
-  programFindLocation = \verb search ->
-    fmap msum $ mapM (findProgramOnSearchPath verb search) ["moc-qt5", "moc"],
-  programFindVersion = \verb path -> do
-      (oLine, eLine, _) <- rawSystemStdInOut verb path ["-v"] Nothing Nothing Nothing IODataModeText
-      return $
-        msum (map (\(p, l) -> findSubseq (stripPrefix p) l)
-          [("(Qt ", eLine), ("moc-qt5 ", oLine), ("moc ", oLine)]) >>=
-        simpleParse . takeWhile (\c -> isDigit c || c == '.'),
+  programFindLocation = \verb _search -> do
+    -- Search all PATH directories for moc binaries with matching major version
+    pathStr <- getEnv "PATH"
+    let dirs = splitSearchPath pathStr
+        candidates = [dir </> name | name <- names, dir <- dirs]
+    findMatchingMoc verb majorVer candidates,
+  programFindVersion = \verb path -> getMocVersion verb path,
   programPostConf = \_ c -> return c,
   programNormaliseArgs = \_ _ args -> args
 }
 
-qtVersionRange :: VersionRange
-qtVersionRange = intersectVersionRanges
-  (orLaterVersion $ mkVersion [5,0]) (earlierVersion $ mkVersion [6,0])
+findMatchingMoc :: Verbosity -> Int -> [FilePath] -> IO (Maybe (FilePath, [FilePath]))
+findMatchingMoc _ _ [] = return Nothing
+findMatchingMoc verb majorVer (p:ps) = do
+    result <- tryIOError $ getMocVersion verb p
+    case result of
+      Right (Just v) | versionNumbers v !! 0 == majorVer ->
+        return $ Just (p, [])
+      _ -> findMatchingMoc verb majorVer ps
 
 copyWithQt ::
   PackageDescription -> LocalBuildInfo -> UserHooks -> CopyFlags -> IO ()
@@ -266,7 +313,13 @@ regWithQt pkg@PackageDescription { library = Just lib } lbi _ flags = do
           -- Add directories to framework search path
           I.frameworkDirs =
             words (getCustomStr xFrameworkDirs pkg) ++
-              I.frameworkDirs instPkgInfo}
+              I.frameworkDirs instPkgInfo,
+          -- On macOS with shared libs, Qt frameworks are already linked into
+          -- the HsQML dylib. Registering them separately causes GHC's runtime
+          -- linker to dlopen each framework with RTLD_LOCAL, which breaks Qt6
+          -- inter-framework symbol dependencies.
+          I.frameworks =
+            if withSharedLib lbi then [] else I.frameworks instPkgInfo}
     case flagToMaybe $ regGenPkgConf flags of
       Just regFile -> do
         writeUTF8File (fromMaybe (display (packageId pkg) <.> "conf") regFile) $

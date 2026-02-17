@@ -10,7 +10,9 @@ class HsQMLAutoListModel : public QAbstractListModel, public QQmlParserStatus
 {
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
+#if QT_VERSION < 0x060000
     Q_ENUMS(Mode)
+#endif
     Q_PROPERTY(Mode mode READ mode WRITE setMode)
     Q_PROPERTY(QJSValue source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QJSValue equalityTest READ equalityTest WRITE setEqualityTest)
@@ -23,6 +25,9 @@ public:
         ByKey,
         ByKeyNoReorder
     };
+#if QT_VERSION >= 0x060000
+    Q_ENUM(Mode)
+#endif
 
     HsQMLAutoListModel(QObject* = NULL);
 

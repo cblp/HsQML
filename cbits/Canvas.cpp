@@ -7,6 +7,10 @@
 #include <QtQuick/QSGTexture>
 #include <QtQuick/QSGTransformNode>
 #include <QtQuick/QQuickWindow>
+#if QT_VERSION >= 0x060000
+#include <QtQuick/QSGTextureProvider>
+#include <QtQuick/QQuickOpenGLUtils>
+#endif
 
 HsQMLGLCallbacks::HsQMLGLCallbacks(
     HsQMLGLSetupCb setupCb, HsQMLGLCleanupCb cleanupCb,
@@ -88,7 +92,11 @@ void HsQMLWindowInfo::addBelow()
 {
     Q_ASSERT(mImpl);
     if (0 == mImpl->mBelowCount++) {
+#if QT_VERSION < 0x060000
         mImpl->mWin->setClearBeforeRendering(false);
+#else
+        mImpl->mWin->setColor(Qt::transparent);
+#endif
     }
 }
 
@@ -96,7 +104,9 @@ void HsQMLWindowInfo::removeBelow()
 {
     Q_ASSERT(mImpl);
     if (0 == --mImpl->mBelowCount) {
+#if QT_VERSION < 0x060000
         mImpl->mWin->setClearBeforeRendering(true);
+#endif
     }
 }
 
@@ -175,8 +185,14 @@ QSGTexture* HsQMLCanvasBackEnd::updateFBO(qreal w, qreal h)
             QSize dims(qCeil(mCanvasWidth), qCeil(mCanvasHeight));
             mFBO.reset(new QOpenGLFramebufferObject(
                 dims, QOpenGLFramebufferObject::Depth));
+#if QT_VERSION >= 0x060000
+            mTexture.reset(QNativeInterface::QSGOpenGLTexture::fromNative(
+                mFBO->texture(), mWindow, dims,
+                QQuickWindow::TextureHasAlphaChannel));
+#else
             mTexture.reset(mWindow->createTextureFromId(
                 mFBO->texture(), dims, QQuickWindow::TextureHasAlphaChannel));
+#endif
         }
     }
     else {
@@ -203,7 +219,11 @@ void HsQMLCanvasBackEnd::setStatus(HsQMLCanvas::Status status)
 void HsQMLCanvasBackEnd::doRendering()
 {
     if (!mGL) {
+#if QT_VERSION >= 0x060000
+        mGL = QOpenGLContext::currentContext();
+#else
         mGL = mWindow->openglContext();
+#endif
         QObject::connect(
             mGL, SIGNAL(aboutToBeDestroyed()), this, SLOT(doCleanup()));
         HsQMLGLCanvasType ctype;
@@ -228,7 +248,9 @@ void HsQMLCanvasBackEnd::doRendering()
     }
 
     // Reset OpenGL state before rendering
-#if QT_VERSION >= 0x050200
+#if QT_VERSION >= 0x060000
+    mWindow->beginExternalCommands();
+#elif QT_VERSION >= 0x050200
     mWindow->resetOpenGLState();
 #else
 #warning Resetting OpenGL state requires Qt 5.2 or later
@@ -281,6 +303,10 @@ void HsQMLCanvasBackEnd::doRendering()
     if (inlineMode) {
         mFBO->release();
     }
+
+#if QT_VERSION >= 0x060000
+    mWindow->endExternalCommands();
+#endif
 }
 
 void HsQMLCanvasBackEnd::doEndFrame()
@@ -333,8 +359,14 @@ HsQMLCanvas::~HsQMLCanvas()
     detachBackEnd();
 }
 
+#if QT_VERSION >= 0x060000
+void HsQMLCanvas::geometryChange(const QRectF& rect, const QRectF& oldRect)
+{
+    QQuickItem::geometryChange(rect, oldRect);
+#else
 void HsQMLCanvas::geometryChanged(const QRectF& rect, const QRectF&)
 {
+#endif
     if (!mCanvasWidthSet) {
         setCanvasWidth(rect.width(), false);
     }
@@ -743,8 +775,12 @@ void HsQMLContextControl::doWindowChanged(QQuickWindow* win)
             mWindow, SIGNAL(sceneGraphInitialized()),
             this, SLOT(doSceneGraphInit()));
         mOriginal = mWindow->requestedFormat();
-        mCurrent = mWindow->openglContext() ?
-            mWindow->openglContext()->format() : mWindow->format();
+#if QT_VERSION >= 0x060000
+        QOpenGLContext* glCtx = QOpenGLContext::currentContext();
+#else
+        QOpenGLContext* glCtx = mWindow->openglContext();
+#endif
+        mCurrent = glCtx ? glCtx->format() : mWindow->format();
     }
     else {
         mOriginal = QSurfaceFormat();
@@ -761,7 +797,14 @@ void HsQMLContextControl::doWindowChanged(QQuickWindow* win)
 
 void HsQMLContextControl::doSceneGraphInit()
 {
-    mCurrent = mWindow->openglContext()->format();
+#if QT_VERSION >= 0x060000
+    QOpenGLContext* glCtx = QOpenGLContext::currentContext();
+#else
+    QOpenGLContext* glCtx = mWindow->openglContext();
+#endif
+    if (glCtx) {
+        mCurrent = glCtx->format();
+    }
     contextChanged();
 }
 
@@ -812,6 +855,13 @@ void HsQMLContextControl::controlContext()
     mWindow->setFormat(fmt);
 
     // Recreate OpenGL context
+#if QT_VERSION >= 0x060000
+    // In Qt6 with forced OpenGL backend, context persistence is the default.
+    // Just recreate the window surface.
+    bool visible = mWindow->isVisible();
+    mWindow->destroy();
+    mWindow->setVisible(visible);
+#else
     mWindow->setPersistentOpenGLContext(false);
     mWindow->setPersistentSceneGraph(false);
     bool visible = mWindow->isVisible();
@@ -820,6 +870,7 @@ void HsQMLContextControl::controlContext()
     mWindow->setVisible(visible);
     mWindow->setPersistentOpenGLContext(true);
     mWindow->setPersistentSceneGraph(true);
+#endif
 }
 
 HsQMLGLDelegateHandle* hsqml_create_gldelegate()

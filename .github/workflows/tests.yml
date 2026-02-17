@@ -22,11 +22,14 @@ jobs:
           version: 0.1.7.1
 
   tests:
-    name: ${{ matrix.ghc }} on ${{ matrix.os }}
+    name: ${{ matrix.ghc }} on ${{ matrix.os }} (Qt${{ matrix.qt }})
     needs: generate-matrix
     runs-on: ${{ matrix.os }}
     strategy:
-      matrix: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+      matrix:
+        ghc: ${{ fromJSON(needs.generate-matrix.outputs.matrix).ghc }}
+        os: ${{ fromJSON(needs.generate-matrix.outputs.matrix).os }}
+        qt: [5, 6]
     steps:
       - name: Checkout base repo
         uses: actions/checkout@v4
@@ -39,7 +42,12 @@ jobs:
           cabal-version: 3.10.3.0
 
       - name: Configure
-        run: cabal configure --enable-tests
+        run: |
+          if [ "${{ matrix.qt }}" = "6" ]; then
+            cabal configure --enable-tests -f UseQt6
+          else
+            cabal configure --enable-tests
+          fi
 
       - name: Cache Cabal packages
         uses: actions/cache@v4.2.3
@@ -48,11 +56,12 @@ jobs:
             ~/.cabal/packages
             ~/.cabal/store
             dist-newstyle
-          key: ${{ runner.os }}-ghc-${{ matrix.ghc }}-cabal-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
+          key: ${{ runner.os }}-ghc-${{ matrix.ghc }}-qt${{ matrix.qt }}-cabal-${{ hashFiles('**/*.cabal', '**/cabal.project', '**/cabal.project.freeze') }}
           restore-keys: |
-            ${{ runner.os }}-ghc-${{ matrix.ghc }}-cabal-
+            ${{ runner.os }}-ghc-${{ matrix.ghc }}-qt${{ matrix.qt }}-cabal-
 
       - name: Install Qt5 Dependencies
+        if: matrix.qt == 5
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -67,10 +76,32 @@ jobs:
             qttools5-dev-tools \
             qtbase5-dev
 
+      - name: Install Qt6 Dependencies
+        if: matrix.qt == 6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qt6-declarative-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            libqt6opengl6-dev \
+            qml6-module-qtquick \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-window
+
       - name: Build
-        run: cabal build --enable-tests
+        run: |
+          if [ "${{ matrix.qt }}" = "6" ]; then
+            cabal build --enable-tests -f UseQt6
+          else
+            cabal build --enable-tests
+          fi
 
       - name: Test
         run: |
           export QT_QPA_PLATFORM=offscreen
-          cabal run hsqml-test1 --enable-tests
+          if [ "${{ matrix.qt }}" = "6" ]; then
+            cabal run hsqml-test1 --enable-tests -f UseQt6
+          else
+            cabal run hsqml-test1 --enable-tests
+          fi
